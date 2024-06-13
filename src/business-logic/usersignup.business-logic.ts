@@ -6,16 +6,28 @@ import { Unauthorized } from "http-errors";
 import { configs } from "../configs";
 import { userforgetPassword } from "../services/email.service";
 import { getAccessToken } from "../middleware/generatetoken.middleware";
+import { UploadedFile } from "express-fileupload";
+import MediaStoreService from "../services/media-store.service";
 
 type UserType = {
   name: string;
   email: string;
   password: string;
   role: string;
-  avatar: string;
-  avatarPath: string;
   phoneNumber: string;
   countryCode: string;
+  avatar: UploadedFile;
+  avatarPath: string;
+  resume: UploadedFile;
+  skills:string[];
+  country:string,
+  state:string,
+  city:string,
+  street:string,
+  zipcode:string,
+  description:string,
+  experience_id:string,
+  education_id:string
 };
 type Userslogin = {
   email: string;
@@ -42,11 +54,14 @@ type Updateinfo = {
   userid: string;
   name: string;
   email: string;
-  password:string;
-  avatar:string,
-  avatarPath:string,
-  phoneNumber:string;
-  countryCode:string;
+  password: string;
+  avatar: string;
+  avatarPath: string;
+  phoneNumber: string;
+  countryCode: string;
+};
+type Selfdata = {
+  userid: string;
 };
 
 export const createUsers = async ({
@@ -54,12 +69,35 @@ export const createUsers = async ({
   email,
   password,
   role,
-  avatar,
   avatarPath,
   phoneNumber,
   countryCode,
+  avatar,
+  resume,
+  skills,
+  country,
+  state,
+  city,
+  street,
+  zipcode,
+  description,
+  experience_id,
+  education_id
 }: UserType) => {
   try {
+    const resumeURL = resume
+      ? await new MediaStoreService().uploadMedia({
+          file: resume,
+          dir: "RESUME",
+        })
+      : undefined;
+    const avatarURL = avatar
+      ? await new MediaStoreService().uploadMedia({
+          file: avatar,
+          dir: "AVATAR",
+        })
+      : undefined;
+
     const hashedpassword = await bcrypt.hash(password, 10);
     const user = await users.findOne({ email });
     if (user) throw new Conflict("email already exist");
@@ -68,10 +106,20 @@ export const createUsers = async ({
       email,
       password: hashedpassword,
       role,
-      avatar,
+      avatar: avatarURL?.url,
+      resume: resumeURL?.url,
       avatarPath,
       phoneNumber,
       countryCode,
+      skills,
+      country,
+      state,
+      city,
+      street,
+      zipcode,
+      description,
+      experience_id,
+      education_id
     });
     return createduser;
   } catch (error) {
@@ -172,29 +220,55 @@ export const changePassword = async ({
     throw error;
   }
 };
-export const updateInfo = async ({ name, email, userid,password,avatar,avatarPath,phoneNumber,countryCode }: Updateinfo) => {
+export const updateInfo = async ({
+  name,
+  email,
+  userid,
+  password,
+  avatar,
+  avatarPath,
+  phoneNumber,
+  countryCode,
+}: Updateinfo) => {
   try {
     // const user = await users.findById(userid);
     // if (!user) {
     //   throw new Error("User not found");
     // }
     const hashedpassword = await bcrypt.hash(password, 10);
-    const updateuser =await users.findByIdAndUpdate(userid, {
-      $set: {
-        name,
-        email,
-        password:hashedpassword,
-        avatar,
-        avatarPath,
-        phoneNumber,
-        countryCode
+    const updateuser = await users.findByIdAndUpdate(
+      userid,
+      {
+        $set: {
+          name,
+          email,
+          password: hashedpassword,
+          avatar,
+          avatarPath,
+          phoneNumber,
+          countryCode,
+        },
       },
-    },{
-      new:true
-
-    });
-return {user:updateuser};
+      {
+        new: true,
+      }
+    );
+    return { user: updateuser };
   } catch (error) {
-    throw error
+    throw error;
+  }
+};
+export const selfData = async ({ userid }: Selfdata) => {
+  try {
+    const user = await users.findById(userid);
+    const payload: any = {
+      id: user?._id,
+    };
+    if (!user) throw NotFound("user not found");
+    const token = getAccessToken(payload, "10d");
+    const { password: pwd, ...userWithoutPassword } = user.toObject();
+    return { user: userWithoutPassword, token };
+  } catch (error) {
+    throw error;
   }
 };
